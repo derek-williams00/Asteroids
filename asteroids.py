@@ -1,5 +1,5 @@
-import random
 import math
+import random
 
 import pygame
 from pygame.locals import *
@@ -9,8 +9,13 @@ WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
 
+def distance(point1, point2):
+    return math.sqrt((point2[0]-point1[0])**2 + (point2[1]-point1[1])**2)
+
+
 class Game:
     display_size = (600, 600)
+    difficulty = 4
     caption = 'Asteriods'
     
     def __init__(self):
@@ -22,6 +27,7 @@ class Game:
         self.fps = 30
         self.player = Rocket((300, 300))
         self.entities = [self.player]
+        self.wave = 0
         self.keys_down = []
 
     def handle_events(self):
@@ -85,11 +91,44 @@ class Game:
             except ValueError:
                 pass
 
+    def handle_asteroid_breakdown(self):
+        bullets = self.get_bullets()
+        asteroids = self.get_asteroids()
+        for asteroid in asteroids:
+            for bullet in bullets:
+                if distance(bullet.pos, asteroid.pos) < asteroid.radius + bullet.radius:
+                    asteroid.break_down(self.entities)
+                    try:
+                        self.entities.remove(bullet)
+                    except ValueError:
+                        pass
+        
     def move_entities(self):
         #print(self.entities)
         for entity in self.entities:
             entity.move()
             entity.handle_surface_wrapping(self.display_size)
+
+    def get_asteroids(self):
+        asteroids = list()
+        for entity in self.entities:
+            if isinstance(entity, Asteroid):
+                asteroids.append(entity)
+        return asteroids
+
+    def get_bullets(self):
+        bullets = list()
+        for entity in self.entities:
+            if isinstance(entity, Bullet):
+                bullets.append(entity)
+        return bullets
+
+    def handle_spawn_asteroids(self):
+        if len(self.get_asteroids()) == 0:
+            self.wave += 1
+            #print(self.wave)
+            for num in range(0, self.wave*self.difficulty):
+                self.entities.append(LargeAsteroid(self.display_size))
 
     def draw(self):
         self.display.fill(BLACK)
@@ -101,6 +140,8 @@ class Game:
         while not self.exit:
             self.handle_events()
             self.handle_pressed_keys()
+            self.handle_spawn_asteroids()
+            self.handle_asteroid_breakdown()
             self.move_entities()
             self.handle_despawn_bullets()
             self.draw()
@@ -146,30 +187,52 @@ class Entity:
         
 
 class Asteroid(Entity):
+    radius = 0
+    line_width = 6
+    min_speed = 1
+    max_speed = 6
+    
     def __init__(self, room_size):
         room_width = room_size[0]
         room_height = room_size[1]
+        self.direction = random.randint(0, 359)
+        self.speed = random.randint(self.min_speed, self.max_speed)
         self.pos = (random.randint(0, room_width), random.randint(0, room_height))
+
+    def break_down(self):
+        pass
+    
+    def draw(self, surface):
+        pygame.draw.circle(surface, WHITE, self.pos, self.radius, self.line_width)
 
 
 class LargeAsteroid(Asteroid):
+    radius = 64
+
     def break_down(self, entity_list):
         entity_list.remove(self)
         for i in range(0, random.randint(1, 4)):
-            entity_list.append(MediumAsteroid(self.pos))
+            fragment = MediumAsteroid((0, 0))
+            fragment.pos = self.pos
+            entity_list.append(fragment)
 
 
 class MediumAsteroid(Asteroid):
+    radius = 32
+
     def break_down(self, entity_list):
         entity_list.remove(self)
         for i in range(0, random.randint(1, 4)):
-            entity_list.append(SmallAsteroid(self.pos))
+            fragment = SmallAsteroid((0, 0))
+            fragment.pos = self.pos
+            entity_list.append(fragment)
 
 
 class SmallAsteroid(Asteroid):
+    radius = 16
+    
     def break_down(self, entity_list):
-        for i in range(0, random.randint(1, 4)):
-            entity_list.remove(self)
+        entity_list.remove(self)
             
 
 class Rocket(Entity):
@@ -177,9 +240,9 @@ class Rocket(Entity):
     width = 16
     max_speed = 8
     min_speed = 1
+    turn_speed = 4
     speed_change_rate = 1.05
     line_width = 4
-    #turn_speed = 8
     points = ((-32, 8), (0, 0), (-32, -8))
     
     def is_hit(self):
@@ -189,19 +252,20 @@ class Rocket(Entity):
         self.speed = min(self.max_speed, self.speed_change_rate*self.speed)
 
     def rotate_left(self):
-        direction = self.direction + self.speed
+        direction = self.direction + self.turn_speed
         if direction >= 360:
             direction -= 360
         self.direction = direction
 
     def rotate_right(self):
-        direction = self.direction - self.speed
+        direction = self.direction - self.turn_speed
         if direction < 0:
             direction += 360
         self.direction = direction
     
     def decelerate(self):
         self.speed = max(self.min_speed, self.speed/self.speed_change_rate)
+        #print(self.speed)
 
     def get_points(self):
         direction = math.radians(360-self.direction)
@@ -227,7 +291,7 @@ class Bullet(Entity):
 
     def __init__(self, owner):
         self.life = 32
-        self.speed = 16
+        self.speed = 32
         self.direction = owner.direction
         self.pos = owner.pos
         self.owner = owner
