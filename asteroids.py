@@ -14,14 +14,18 @@ def distance(point1, point2):
 
 
 class Game:
-    display_size = (600, 600)
+    display_size = (1024, 768)
     difficulty = 4
     caption = 'Asteriods'
     
     def __init__(self):
         self.exit = False
+        self.over = False
+        self.score = 0
+        self.ptnl = 200
+        self.lives = 4
         pygame.init()
-        self.display = pygame.display.set_mode(self.display_size)
+        self.display = pygame.display.set_mode(self.display_size, RESIZABLE)
         pygame.display.set_caption(self.caption)
         self.clock = pygame.time.Clock()
         self.fps = 30
@@ -34,6 +38,9 @@ class Game:
         for event in pygame.event.get():
             if event.type == QUIT:
                 self.exit = True
+            if event.type == VIDEORESIZE:
+                self.display_size = event.dict['size']
+                self.display = pygame.display.set_mode(self.display_size, RESIZABLE)
             if event.type == KEYDOWN:
                 if event.key == K_UP:
                     self.keys_down.append(K_UP)
@@ -98,10 +105,29 @@ class Game:
             for bullet in bullets:
                 if distance(bullet.pos, asteroid.pos) < asteroid.radius + bullet.radius:
                     asteroid.break_down(self.entities)
+                    self.score += 100
+                    self.ptnl -= 100
+                    if self.ptnl < 1:
+                        self.lives += 1
+                        self.ptnl = self.score
                     try:
                         self.entities.remove(bullet)
                     except ValueError:
                         pass
+
+    def handle_asteroid_rocket_collision(self):
+        for point in self.player.get_points():
+            for asteroid in self.get_asteroids():
+                if distance(point, asteroid.pos) < asteroid.radius:
+                    asteroid.break_down(self.entities)
+                    self.rocket_death()
+
+    def rocket_death(self):
+        if self.lives < 1:
+            self.over = True
+        else:
+            self.lives -= 1
+            self.player.respawn(self.display_size)
         
     def move_entities(self):
         #print(self.entities)
@@ -130,6 +156,27 @@ class Game:
             for num in range(0, self.wave*self.difficulty):
                 self.entities.append(LargeAsteroid(self.display_size))
 
+    def handle_lives(self):
+        symbol_pos = [8, 8]
+        symbol_margin = 4
+        def is_not_lifesymbol(item):
+            if isinstance(item, LifeSymbol):
+                return False
+            else:
+                return True
+        self.entities = list(filter(is_not_lifesymbol, self.entities))
+        lives = self.lives
+        while lives:
+            new_symbol = LifeSymbol(symbol_pos)
+            self.entities.append(new_symbol)
+            symbol_pos[0] += new_symbol.width
+            symbol_pos[0] += symbol_margin
+            lives -= 1
+
+    def handle_game_over(self):
+        if self.over:
+            self.exit = True
+
     def draw(self):
         self.display.fill(BLACK)
         for entity in self.entities:
@@ -142,8 +189,11 @@ class Game:
             self.handle_pressed_keys()
             self.handle_spawn_asteroids()
             self.handle_asteroid_breakdown()
+            self.handle_asteroid_rocket_collision()
+            self.handle_game_over()
             self.move_entities()
             self.handle_despawn_bullets()
+            self.handle_lives()
             self.draw()
             self.clock.tick(self.fps)
 
@@ -245,8 +295,8 @@ class Rocket(Entity):
     line_width = 4
     points = ((-32, 8), (0, 0), (-32, -8))
     
-    def is_hit(self):
-        pass
+    def respawn(self, surface_size):
+        self.pos = (int(surface_size[0]/2), int(surface_size[1]/2))
     
     def accelerate(self):
         self.speed = min(self.max_speed, self.speed_change_rate*self.speed)
@@ -285,6 +335,16 @@ class Rocket(Entity):
     def draw(self, surface):
         pygame.draw.polygon(surface, WHITE, self.get_points(), self.line_width)
 
+
+class LifeSymbol(Rocket):
+    height = 16
+    width = 8
+    max_speed = 0
+    min_speed = 0
+    turn_speed = 0
+    speed_change_rate = 1
+    line_width = 2
+    points = ((4, 16), (0, 0), (-4, 16))
 
 class Bullet(Entity):
     radius = 3
