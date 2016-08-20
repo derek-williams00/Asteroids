@@ -22,9 +22,10 @@ class Game:
         self.exit = False
         self.over = False
         self.score = 0
-        self.ptnl = 200
-        self.lives = 4
+        self.lives = 3
         pygame.init()
+        self.score_font_size = 24
+        self.score_font = pygame.font.Font(None, self.score_font_size)
         self.display = pygame.display.set_mode(self.display_size, RESIZABLE)
         pygame.display.set_caption(self.caption)
         self.clock = pygame.time.Clock()
@@ -106,10 +107,6 @@ class Game:
                 if distance(bullet.pos, asteroid.pos) < asteroid.radius + bullet.radius:
                     asteroid.break_down(self.entities)
                     self.score += 100
-                    self.ptnl -= 100
-                    if self.ptnl < 1:
-                        self.lives += 1
-                        self.ptnl = self.score
                     try:
                         self.entities.remove(bullet)
                     except ValueError:
@@ -121,6 +118,17 @@ class Game:
                 if distance(point, asteroid.pos) < asteroid.radius:
                     asteroid.break_down(self.entities)
                     self.rocket_death()
+
+    def draw_score(self):
+        score_display_margin = 4
+        pos = list(self.display_size)
+        score_char_len = len(str(self.score))
+        score_display_width = score_char_len * self.score_font_size
+        score_display_height = self.score_font_size
+        pos[0] -= (score_display_width + score_display_margin)
+        pos[1] = score_display_margin
+        score_text_surface = self.score_font.render(str(self.score), False, WHITE)
+        self.display.blit(score_text_surface, pos)
 
     def rocket_death(self):
         if self.lives < 1:
@@ -152,6 +160,7 @@ class Game:
     def handle_spawn_asteroids(self):
         if len(self.get_asteroids()) == 0:
             self.wave += 1
+            self.lives += 1
             #print(self.wave)
             for num in range(0, self.wave*self.difficulty):
                 self.entities.append(LargeAsteroid(self.display_size))
@@ -179,6 +188,7 @@ class Game:
 
     def draw(self):
         self.display.fill(BLACK)
+        self.draw_score()
         for entity in self.entities:
             entity.draw(self.display)
         pygame.display.update()        
@@ -260,7 +270,10 @@ class LargeAsteroid(Asteroid):
     radius = 64
 
     def break_down(self, entity_list):
-        entity_list.remove(self)
+        try:
+            entity_list.remove(self)
+        except ValueError:
+            pass
         for i in range(0, random.randint(1, 4)):
             fragment = MediumAsteroid((0, 0))
             fragment.pos = self.pos
